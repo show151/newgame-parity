@@ -11,6 +11,17 @@ type Snapshot = {
   turn: Player;
 };
 
+const ROW_LABELS = ["春", "夏", "秋", "冬", "廻"] as const;
+const COL_LABELS_LEFT_TO_RIGHT = ["五", "四", "三", "二", "一"] as const;
+
+function posToLabel(pos: number): string {
+  const row = Math.floor(pos / 5);
+  const col = pos % 5;
+  const rowLabel = ROW_LABELS[row] ?? "?";
+  const colLabel = COL_LABELS_LEFT_TO_RIGHT[col] ?? "?";
+  return `${colLabel}${rowLabel}`;
+}
+
 export default function PlayPage() {
   const [history, setHistory] = useState<Snapshot[]>([{ board: emptyBoard(), turn: "p1" }]);
   const current = history[history.length - 1];
@@ -141,7 +152,7 @@ export default function PlayPage() {
         <ol>
           {moves.map(m => (
             <li key={m.ply}>
-              {m.ply}. {m.player === "p1" ? "先手" : "後手"} 置き: {m.pos}
+              {m.ply}. {m.player === "p1" ? "先手" : "後手"} 置き: {posToLabel(m.pos)}
             </li>
           ))}
         </ol>
