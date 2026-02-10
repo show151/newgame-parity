@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #2b2117;
+  --paper: #f7f1e6;
+  --wood: #ddb98d;
+  --wood-dark: #c99866;
+  --line: #1f1a14;
+  --accent: #a24d2f;
+  --gold: #d6b26a;
+  --highlight: #f2e1b4;
+  --cell: #f5e5c9;
+  --cell-ink: #2b2117;
+  --shadow: rgba(49, 34, 20, 0.2);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-hisei-sans);
+  --font-mono: var(--font-hisei-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-hisei-sans), serif;
+  background:
+    radial-gradient(1100px 500px at 20% 0%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(800px 500px at 90% 10%, rgba(255, 255, 255, 0.35), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(120, 80, 40, 0.08) 0, rgba(120, 80, 40, 0.08) 2px, transparent 2px, transparent 10px),
+    linear-gradient(120deg, var(--wood) 0%, #e5c79b 35%, var(--wood-dark) 100%);
+  min-height: 100vh;
+}
+
+main {
+  background: rgba(247, 241, 230, 0.85);
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px var(--shadow);
+  margin: 24px auto;
+  width: min(980px, calc(100% - 32px));
+}
+
+h1, h2, h3 {
+  font-family: var(--font-hisei-serif), serif;
+  letter-spacing: 0.02em;
+}
+
+a, button {
+  font-family: inherit;
+}
+
+button, input {
+  outline-color: var(--accent);
+}
+
+details {
+  background: rgba(255, 255, 255, 0.6);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
 }
