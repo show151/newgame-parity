@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 function formatAuthError(err: unknown, fallback: string): string {
-  const e = err as { message?: string; status?: number; code?: string };
+  const e = err as { message?: string };
   const raw = e?.message ?? "";
   if (!raw) return fallback;
   if (raw.includes("Invalid login credentials")) return "メールアドレスまたはパスワードが正しくありません。";
@@ -95,8 +95,17 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 12, maxWidth: 420, justifyItems: "center" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800 }}>ログイン</h1>
+    <main
+      style={{
+        padding: 16,
+        display: "grid",
+        gap: 12,
+        width: "min(420px, 100%)",
+        boxSizing: "border-box",
+        justifyItems: "stretch",
+      }}
+    >
+      <h1 style={{ fontSize: 24, fontWeight: 800, textAlign: "center", margin: 0 }}>ログイン</h1>
 
       <div style={{ display: "grid", gap: 8, width: "100%" }}>
         <label style={{ display: "grid", gap: 6 }}>
@@ -109,6 +118,7 @@ export default function LoginPage() {
             style={inputStyle}
           />
         </label>
+
         <label style={{ display: "grid", gap: 6 }}>
           <span>パスワード</span>
           <input
@@ -121,29 +131,32 @@ export default function LoginPage() {
         </label>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-        <button onClick={signIn} disabled={loading} style={btnStyle}>
-          ログイン
-        </button>
-        <button onClick={signUp} disabled={loading} style={btnStyle}>
-          新規登録
-        </button>
-        <button onClick={signOut} disabled={loading} style={btnStyle}>
-          ログアウト
-        </button>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <button onClick={signIn} disabled={loading} style={btnStyle}>ログイン</button>
+        <button onClick={signUp} disabled={loading} style={btnStyle}>新規登録</button>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-        <Link href="/" style={btnStyle}>
-          戻る
-        </Link>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <button onClick={signOut} disabled={loading} style={btnStyle}>ログアウト</button>
+        <Link href="/" style={{ ...btnStyle, textAlign: "center" }}>戻る</Link>
       </div>
 
-      <div style={{ fontSize: 14, color: "#555", textAlign: "center" }}>
+      <div style={{ fontSize: 14, color: "#555", textAlign: "center", wordBreak: "break-word" }}>
         {currentUser ? `ログイン中: ${currentUser}` : "未ログインです。"}
       </div>
+
       {status && (
-        <div style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)", width: "100%" }}>
+        <div
+          style={{
+            padding: 12,
+            border: "1px solid var(--line)",
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.6)",
+            width: "100%",
+            boxSizing: "border-box",
+            overflowWrap: "anywhere",
+          }}
+        >
           {status}
         </div>
       )}
@@ -160,6 +173,8 @@ const btnStyle: React.CSSProperties = {
   textDecoration: "none",
   color: "var(--ink)",
   boxShadow: "0 2px 0 rgba(120, 80, 40, 0.25)",
+  width: "100%",
+  boxSizing: "border-box",
 };
 
 const inputStyle: React.CSSProperties = {
@@ -167,4 +182,6 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 10,
   border: "1px solid var(--line)",
   background: "rgba(255,255,255,0.8)",
+  width: "100%",
+  boxSizing: "border-box",
 };
