@@ -64,7 +64,16 @@ export default function LoginPage() {
     setLoading(true);
     setStatus("");
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const redirectTo =
+        process.env.NEXT_PUBLIC_SITE_URL
+          ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/login`
+          : `${window.location.origin}/login`;
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectTo },
+      });
       if (error) throw error;
       if (!data.session) {
         setStatus("登録しました。確認メールを開いて認証を完了してください。");
