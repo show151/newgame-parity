@@ -6,7 +6,7 @@ import Board from "@/components/Board";
 import { applyMove, emptyBoard, type Player } from "@/lib/gameLogic";
 import { saveMatchToSupabase, type MoveRecord } from "@/lib/saveMatch";
 import { supabase } from "@/lib/supabaseClient";
-import { getFeaturedMatchIds } from "@/lib/profilePrefs";
+import { getClipPrefsFromUserMetadata } from "@/lib/profilePrefs";
 
 type Snapshot = {
   board: number[];
@@ -97,23 +97,14 @@ export default function PlayPage() {
     setSaving(true);
     const protectedIdsSet = new Set<string>();
     try {
-      const raw = window.localStorage.getItem("hisei_starred_matches");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          for (const id of parsed) {
-            if (typeof id === "string") protectedIdsSet.add(id);
-          }
-        }
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth.user) {
+        const clipPrefs = getClipPrefsFromUserMetadata(auth.user.user_metadata);
+        for (const id of clipPrefs.starredIds) protectedIdsSet.add(id);
+        for (const id of clipPrefs.featuredIds) protectedIdsSet.add(id);
       }
     } catch {
-      // ignore localStorage parse error
-    }
-    const { data: auth } = await supabase.auth.getUser();
-    if (auth.user) {
-      for (const id of getFeaturedMatchIds(auth.user.id)) {
-        protectedIdsSet.add(id);
-      }
+      // ignore auth / metadata fetch errors
     }
 
     const res = await saveMatchToSupabase({

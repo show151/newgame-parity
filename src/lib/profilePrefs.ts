@@ -1,9 +1,15 @@
-const PREFS_STORAGE_KEY_PREFIX = "hisei_profile_prefs_v1";
+import { supabase } from "@/lib/supabaseClient";
+
+const PREFS_STORAGE_KEY_PREFIX = "hisei_profile_prefs_v2";
 const FEATURED_CLIPS_LIMIT = 3;
 
 type StoredPrefs = {
   matchNames?: Record<string, string>;
-  featuredMatchIds?: string[];
+};
+
+export type ClipPrefs = {
+  starredIds: string[];
+  featuredIds: string[];
 };
 
 function getStorageKey(userId: string) {
@@ -45,38 +51,47 @@ export function setMatchName(userId: string, matchId: string, name: string) {
   writePrefs(userId, { ...prefs, matchNames: nextMatchNames });
 }
 
-export function getFeaturedMatchIds(userId: string): string[] {
-  const prefs = readPrefs(userId);
-  const ids = prefs.featuredMatchIds ?? [];
-  return Array.from(new Set(ids)).slice(0, FEATURED_CLIPS_LIMIT);
+function normalizeIds(value: unknown, limit?: number): string[] {
+  const arr = Array.isArray(value) ? value.filter(x => typeof x === "string") : [];
+  const unique = Array.from(new Set(arr));
+  if (typeof limit === "number") return unique.slice(0, limit);
+  return unique;
 }
 
-export function toggleFeaturedMatch(userId: string, matchId: string) {
-  const prefs = readPrefs(userId);
-  const current = getFeaturedMatchIds(userId);
-  if (current.includes(matchId)) {
-    const next = current.filter(id => id !== matchId);
-    writePrefs(userId, { ...prefs, featuredMatchIds: next });
-    return { ok: true as const, featuredIds: next };
-  }
+export function getClipPrefsFromUserMetadata(metadata: unknown): ClipPrefs {
+  const meta = (metadata ?? {}) as { starred_match_ids?: unknown; featured_match_ids?: unknown };
+  return {
+    starredIds: normalizeIds(meta.starred_match_ids),
+    featuredIds: normalizeIds(meta.featured_match_ids, FEATURED_CLIPS_LIMIT),
+  };
+}
 
-  if (current.length >= FEATURED_CLIPS_LIMIT) {
-    return { ok: false as const, featuredIds: current };
+export async function saveClipPrefsToSupabase(args: {
+  starredIds: string[];
+  featuredIds: string[];
+}) {
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      starred_match_ids: normalizeIds(args.starredIds),
+      featured_match_ids: normalizeIds(args.featuredIds, FEATURED_CLIPS_LIMIT),
+    },
+  });
+  if (error) {
+    return { ok: false as const, reason: error.message };
   }
+  return { ok: true as const };
+}
 
-  const next = [...current, matchId];
-  writePrefs(userId, { ...prefs, featuredMatchIds: next });
-  return { ok: true as const, featuredIds: next };
+export function getFeaturedMatchIdsFromMetadata(metadata: unknown): string[] {
+  return getClipPrefsFromUserMetadata(metadata).featuredIds;
 }
 
 export function removeMatchFromPrefs(userId: string, matchId: string) {
   const prefs = readPrefs(userId);
   const nextMatchNames = { ...(prefs.matchNames ?? {}) };
   delete nextMatchNames[matchId];
-  const nextFeatured = getFeaturedMatchIds(userId).filter(id => id !== matchId);
   writePrefs(userId, {
     ...prefs,
     matchNames: nextMatchNames,
-    featuredMatchIds: nextFeatured,
   });
 }

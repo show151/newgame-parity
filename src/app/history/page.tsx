@@ -4,11 +4,11 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  getFeaturedMatchIds,
+  getClipPrefsFromUserMetadata,
   getMatchNames,
   removeMatchFromPrefs,
+  saveClipPrefsToSupabase,
   setMatchName,
-  toggleFeaturedMatch,
 } from "@/lib/profilePrefs";
 
 type MatchRow = {
@@ -17,8 +17,6 @@ type MatchRow = {
   winner: string;
   moves_count: number;
 };
-
-const STAR_STORAGE_KEY = "hisei_starred_matches";
 
 function toHistoryErrorMessage(error: unknown): string {
   const e = error as { message?: string };
@@ -29,32 +27,16 @@ function toHistoryErrorMessage(error: unknown): string {
   return `棋譜の取得に失敗しました。詳細: ${raw}`;
 }
 
-function loadStarred(): Set<string> {
-  if (typeof window === "undefined") return new Set<string>();
-  try {
-    const raw = window.localStorage.getItem(STAR_STORAGE_KEY);
-    if (!raw) return new Set<string>();
-    const arr = JSON.parse(raw) as string[];
-    return new Set(arr);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function saveStarred(starred: Set<string>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STAR_STORAGE_KEY, JSON.stringify(Array.from(starred)));
-}
-
 export default function HistoryPage() {
   const [status, setStatus] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [starred, setStarred] = useState<Set<string>>(() => loadStarred());
+  const [starred, setStarred] = useState<Set<string>>(new Set());
   const [featured, setFeatured] = useState<Set<string>>(new Set());
   const [matchNames, setMatchNames] = useState<Record<string, string>>({});
   const [draftNames, setDraftNames] = useState<Record<string, string>>({});
+  const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
@@ -70,8 +52,10 @@ export default function HistoryPage() {
         }
         setUserId(auth.user.id);
         const names = getMatchNames(auth.user.id);
+        const clipPrefs = getClipPrefsFromUserMetadata(auth.user.user_metadata);
         setMatchNames(names);
-        setFeatured(new Set(getFeaturedMatchIds(auth.user.id)));
+        setStarred(new Set(clipPrefs.starredIds));
+        setFeatured(new Set(clipPrefs.featuredIds));
 
         const { data, error } = await supabase
           .from("matches")
@@ -109,11 +93,16 @@ export default function HistoryPage() {
   }, [rows, starred]);
 
   const toggleStar = (id: string) => {
+    if (!userId) return;
     setStarred(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      saveStarred(next);
+      const featuredIds = Array.from(featured);
+      const nextStarred = Array.from(next);
+      saveClipPrefsToSupabase({ starredIds: nextStarred, featuredIds }).then(res => {
+        if (!res.ok) setStatus(`お気に入りの保存に失敗しました。詳細: ${res.reason}`);
+      });
       return next;
     });
   };
@@ -130,13 +119,34 @@ export default function HistoryPage() {
 
   const toggleFeatured = (matchId: string) => {
     if (!userId) return;
-    const result = toggleFeaturedMatch(userId, matchId);
-    if (!result.ok) {
-      setStatus("プロフィール掲載は最大3件までです。");
-      return;
+    const current = Array.from(featured);
+    let nextFeatured: string[];
+    if (current.includes(matchId)) {
+      nextFeatured = current.filter(id => id !== matchId);
+    } else {
+      if (current.length >= 3) {
+        setStatus("プロフィール掲載は最大3件までです。");
+        return;
+      }
+      nextFeatured = [...current, matchId];
     }
-    setFeatured(new Set(result.featuredIds));
-    setStatus(result.featuredIds.includes(matchId) ? "プロフィール掲載に追加しました。" : "プロフィール掲載から外しました。");
+    setFeatured(new Set(nextFeatured));
+    saveClipPrefsToSupabase({ starredIds: Array.from(starred), featuredIds: nextFeatured }).then(res => {
+      if (!res.ok) {
+        setStatus(`プロフィール掲載の保存に失敗しました。詳細: ${res.reason}`);
+        return;
+      }
+      setStatus(nextFeatured.includes(matchId) ? "プロフィール掲載に追加しました。" : "プロフィール掲載から外しました。");
+    });
+  };
+
+  const toggleEditPanel = (id: string) => {
+    setEditingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -162,80 +172,110 @@ export default function HistoryPage() {
         {sortedRows.map(r => {
           const isStarred = starred.has(r.id);
           const isFeatured = featured.has(r.id);
+          const isEditing = editingIds.has(r.id);
           const displayName = matchNames[r.id] || "（名前なし）";
           return (
             <li key={r.id} style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <b>{new Date(r.created_at).toLocaleString()}</b>
-                <button
-                  style={{ ...btnStyle, padding: "4px 10px", borderRadius: 999 }}
-                  onClick={() => toggleStar(r.id)}
-                  aria-pressed={isStarred}
-                  title={isStarred ? "お気に入りを解除" : "お気に入りに追加"}
-                >
-                  {isStarred ? "★ お気に入り" : "☆ お気に入り"}
-                </button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <b>{displayName}</b>
+                  <div style={{ fontSize: 13, color: "#555" }}>{new Date(r.created_at).toLocaleString()}</div>
+                  <div style={{ fontSize: 13 }}>
+                    勝者: {r.winner === "p1" ? "先手" : "後手"} / 手数: {r.moves_count}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {isStarred && <span style={badgeStyle}>お気に入り</span>}
+                    {isFeatured && <span style={badgeStyle}>プロフィール掲載</span>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Link href={`/history/${r.id}`} style={btnStyle}>再生</Link>
+                  <button style={btnStyle} onClick={() => toggleEditPanel(r.id)}>
+                    {isEditing ? "編集を閉じる" : "編集"}
+                  </button>
+                </div>
               </div>
-              <div style={{ marginTop: 6, marginBottom: 6 }}>
-                <b>棋譜名:</b> {displayName}
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                <input
-                  value={draftNames[r.id] ?? ""}
-                  onChange={e => setDraftNames(prev => ({ ...prev, [r.id]: e.target.value }))}
-                  placeholder="棋譜名を入力"
-                  style={inputStyle}
-                />
-                <button style={btnStyle} onClick={() => saveName(r.id)}>名前を保存</button>
-                <button
-                  style={btnStyle}
-                  onClick={() => toggleFeatured(r.id)}
-                  title={isFeatured ? "プロフィール掲載から外す" : "プロフィール掲載に追加"}
-                >
-                  {isFeatured ? "掲載中（プロフィール）" : "プロフィールに掲載"}
-                </button>
-              </div>
-              <div>勝者: {r.winner === "p1" ? "先手" : "後手"} / 手数: {r.moves_count}</div>
-              <div style={{ fontSize: 12, color: "#666" }}>棋譜ID: {r.id}</div>
-              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Link href={`/history/${r.id}`} style={btnStyle}>盤面で再生</Link>
-                <button
-                  style={btnStyle}
-                  disabled={deletingId === r.id}
-                  onClick={async () => {
-                    const ok = window.confirm("この棋譜を削除します。よろしいですか？");
-                    if (!ok) return;
-                    setDeletingId(r.id);
-                    setStatus("");
-                    const { error } = await supabase.from("matches").delete().eq("id", r.id);
-                    setDeletingId(null);
-                    if (error) {
-                      setStatus(`棋譜の削除に失敗しました。詳細: ${error.message}`);
-                      return;
-                    }
-                    setRows(prev => {
-                      const next = prev.filter(x => x.id !== r.id);
-                      setStatus(next.length === 0 ? "保存棋譜がまだありません。" : "");
-                      return next;
-                    });
-                    if (userId) {
-                      removeMatchFromPrefs(userId, r.id);
-                      setMatchNames(getMatchNames(userId));
-                      setFeatured(new Set(getFeaturedMatchIds(userId)));
-                    }
-                    setStarred(prev => {
-                      const next = new Set(prev);
-                      if (next.has(r.id)) {
-                        next.delete(r.id);
-                        saveStarred(next);
-                      }
-                      return next;
-                    });
-                  }}
-                >
-                  {deletingId === r.id ? "削除中..." : "削除"}
-                </button>
-              </div>
+              {isEditing && (
+                <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 10, display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      style={{ ...btnStyle, padding: "4px 10px", borderRadius: 999 }}
+                      onClick={() => toggleStar(r.id)}
+                      aria-pressed={isStarred}
+                      title={isStarred ? "お気に入りを解除" : "お気に入りに追加"}
+                    >
+                      {isStarred ? "★ お気に入り" : "☆ お気に入り"}
+                    </button>
+                    <button
+                      style={btnStyle}
+                      onClick={() => toggleFeatured(r.id)}
+                      title={isFeatured ? "プロフィール掲載から外す" : "プロフィール掲載に追加"}
+                    >
+                      {isFeatured ? "掲載中（プロフィール）" : "プロフィールに掲載"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input
+                      value={draftNames[r.id] ?? ""}
+                      onChange={e => setDraftNames(prev => ({ ...prev, [r.id]: e.target.value }))}
+                      placeholder="棋譜名を入力"
+                      style={inputStyle}
+                    />
+                    <button style={btnStyle} onClick={() => saveName(r.id)}>名前を保存</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#666" }}>棋譜ID: {r.id}</div>
+                  <div>
+                    <button
+                      style={btnStyle}
+                      disabled={deletingId === r.id}
+                      onClick={async () => {
+                        const ok = window.confirm("この棋譜を削除します。よろしいですか？");
+                        if (!ok) return;
+                        setDeletingId(r.id);
+                        setStatus("");
+                        const { error } = await supabase.from("matches").delete().eq("id", r.id);
+                        setDeletingId(null);
+                        if (error) {
+                          setStatus(`棋譜の削除に失敗しました。詳細: ${error.message}`);
+                          return;
+                        }
+                        setRows(prev => {
+                          const next = prev.filter(x => x.id !== r.id);
+                          setStatus(next.length === 0 ? "保存棋譜がまだありません。" : "");
+                          return next;
+                        });
+                        setEditingIds(prev => {
+                          const next = new Set(prev);
+                          next.delete(r.id);
+                          return next;
+                        });
+                        if (userId) {
+                          removeMatchFromPrefs(userId, r.id);
+                          setMatchNames(getMatchNames(userId));
+                        }
+                        setStarred(prev => {
+                          const next = new Set(prev);
+                          if (next.has(r.id)) next.delete(r.id);
+                          saveClipPrefsToSupabase({
+                            starredIds: Array.from(next),
+                            featuredIds: Array.from(featured).filter(id => id !== r.id),
+                          }).then(res => {
+                            if (!res.ok) setStatus(`削除後の設定保存に失敗しました。詳細: ${res.reason}`);
+                          });
+                          return next;
+                        });
+                        setFeatured(prev => {
+                          const next = new Set(prev);
+                          if (next.has(r.id)) next.delete(r.id);
+                          return next;
+                        });
+                      }}
+                    >
+                      {deletingId === r.id ? "削除中..." : "削除"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </li>
           );
         })}
@@ -262,4 +302,12 @@ const inputStyle: React.CSSProperties = {
   minWidth: 220,
   flex: "1 1 220px",
   background: "rgba(255,255,255,0.9)",
+};
+
+const badgeStyle: React.CSSProperties = {
+  fontSize: 12,
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid var(--line)",
+  background: "rgba(245, 223, 187, 0.45)",
 };
