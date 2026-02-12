@@ -27,7 +27,8 @@ type UserMeta = {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [status, setStatus] = useState("読み込み中...");
+  const [status, setStatus] = useState("");
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -46,50 +47,57 @@ export default function ProfilePage() {
 
   useEffect(() => {
     (async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session?.user) {
-        router.replace("/login");
-        return;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session?.user) {
+          router.replace("/login");
+          return;
+        }
+        const currentUser = sessionData.session.user;
+
+        setUserId(currentUser.id);
+        setEmail(currentUser.email ?? "");
+
+        const meta = (currentUser.user_metadata ?? {}) as UserMeta;
+        setDisplayName(meta.display_name ?? "");
+        setStatusMessage(meta.status_message ?? "");
+
+        const profilePrefs = getProfilePrefsFromUserMetadata(currentUser.user_metadata);
+        const loaded = await loadCurrentProfilePrefsFromProfiles();
+        if (loaded.ok) {
+          setMatchNames(loaded.prefs.matchNames);
+          setFeaturedIds(loaded.prefs.featuredIds);
+          setStarredIdsForSave(loaded.prefs.starredIds);
+        } else {
+          setMatchNames({});
+          setFeaturedIds([]);
+          setStarredIdsForSave([]);
+          setStatus(`プロフィール設定の取得に失敗しました。詳細: ${loaded.reason}`);
+        }
+        setIconText(profilePrefs.iconText);
+        const iconRes = await loadIconImageDataUrlFromProfiles();
+        if (iconRes.ok) setIconImageDataUrl(iconRes.iconImageDataUrl);
+        else setIconImageDataUrl(profilePrefs.iconImageDataUrl);
+
+        const { data, error } = await supabase
+          .from("matches")
+          .select("id, created_at, winner, moves_count, final_board")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false })
+          .limit(30);
+
+        if (error) {
+          setStatus(`プロフィール読み込みに失敗しました。詳細: ${error.message}`);
+          return;
+        }
+
+        setRows((data ?? []) as MatchRow[]);
+      } catch (err) {
+        const e = err as { message?: string };
+        setStatus(`プロフィール読み込み中にエラーが発生しました。詳細: ${e.message ?? "unknown error"}`);
+      } finally {
+        setLoadingProfile(false);
       }
-      const currentUser = sessionData.session.user;
-
-      setUserId(currentUser.id);
-      setEmail(currentUser.email ?? "");
-
-      const meta = (currentUser.user_metadata ?? {}) as UserMeta;
-      setDisplayName(meta.display_name ?? "");
-      setStatusMessage(meta.status_message ?? "");
-
-      const profilePrefs = getProfilePrefsFromUserMetadata(currentUser.user_metadata);
-      const loaded = await loadCurrentProfilePrefsFromProfiles();
-      if (loaded.ok) {
-        setMatchNames(loaded.prefs.matchNames);
-        setFeaturedIds(loaded.prefs.featuredIds);
-        setStarredIdsForSave(loaded.prefs.starredIds);
-      } else {
-        setMatchNames({});
-        setFeaturedIds([]);
-        setStarredIdsForSave([]);
-      }
-      setIconText(profilePrefs.iconText);
-      const iconRes = await loadIconImageDataUrlFromProfiles();
-      if (iconRes.ok) setIconImageDataUrl(iconRes.iconImageDataUrl);
-      else setIconImageDataUrl(profilePrefs.iconImageDataUrl);
-
-      const { data, error } = await supabase
-        .from("matches")
-        .select("id, created_at, winner, moves_count, final_board")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false })
-        .limit(30);
-
-      if (error) {
-        setStatus(`プロフィール読み込みに失敗しました。詳細: ${error.message}`);
-        return;
-      }
-
-      setRows((data ?? []) as MatchRow[]);
-      setStatus("");
     })();
   }, [router]);
 
@@ -145,9 +153,16 @@ export default function ProfilePage() {
     setLoggingOut(true);
     setStatus("");
     try {
-      const { error } = await supabase.auth.signOut();
+      const signOutResult = await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<{ error: { message: string } }>(resolve =>
+          setTimeout(() => resolve({ error: { message: "timeout" } }), 4000),
+        ),
+      ]);
+      const { error } = signOutResult;
       if (error) {
-        setStatus(`ログアウトに失敗しました。詳細: ${error.message}`);
+        // Mobile Safari sometimes keeps stale state; fallback to hard navigate.
+        window.location.href = "/";
         return;
       }
       router.push("/");
@@ -186,6 +201,9 @@ export default function ProfilePage() {
   return (
     <main style={{ padding: "clamp(12px, 4vw, 24px)", display: "grid", gap: 12, justifyItems: "center" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>プロフィール</h1>
+      {loadingProfile && (
+        <div style={{ width: "100%", maxWidth: 760, fontSize: 14, color: "#666" }}>読み込み中...</div>
+      )}
 
       <section style={sectionStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
