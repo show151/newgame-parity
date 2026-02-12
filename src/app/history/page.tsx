@@ -4,11 +4,9 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  ensureFriendIdForCurrentUser,
   loadCurrentProfilePrefsFromProfiles,
   saveClipPrefsToSupabase,
   saveMatchNamesToSupabase,
-  syncCurrentUserPublicProfile,
 } from "@/lib/profilePrefs";
 
 type MatchRow = {
@@ -41,20 +39,13 @@ export default function HistoryPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data: auth, error: authError } = await supabase.auth.getUser();
-        if (authError) {
-          setStatus(`認証確認に失敗しました。詳細: ${authError.message}`);
-          return;
-        }
-        if (!auth.user) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session?.user) {
           setStatus("未ログインです。ログインすると保存棋譜を見られます。");
           return;
         }
-        await ensureFriendIdForCurrentUser();
-        await syncCurrentUserPublicProfile();
-        const { data: refreshed } = await supabase.auth.getUser();
-        const user = refreshed.user ?? auth.user;
-        setUserId(auth.user.id);
+        const user = sessionData.session.user;
+        setUserId(user.id);
         const loaded = await loadCurrentProfilePrefsFromProfiles();
         if (loaded.ok) {
           setMatchNames(loaded.prefs.matchNames);
@@ -69,7 +60,7 @@ export default function HistoryPage() {
         const { data, error } = await supabase
           .from("matches")
           .select("id, created_at, winner, moves_count")
-          .eq("user_id", auth.user.id)
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(30);
 

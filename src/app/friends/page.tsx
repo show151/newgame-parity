@@ -3,11 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  ensureFriendIdForCurrentUser,
-  getFriendIdFromUserMetadata,
-  syncCurrentUserPublicProfile,
-} from "@/lib/profilePrefs";
+import { getFriendIdFromUserMetadata } from "@/lib/profilePrefs";
 
 type ProfileRow = {
   user_id: string;
@@ -43,34 +39,34 @@ export default function FriendsPage() {
   const existingFriendIds = useMemo(() => new Set(friends.map(x => x.user_id)), [friends]);
 
   const reload = async () => {
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError || !auth.user) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session?.user) {
       setStatus("ログインが必要です。");
       return;
     }
-
-    const ensured = await ensureFriendIdForCurrentUser();
-    if (!ensured.ok) {
-      setStatus(`フレンドIDの準備に失敗しました。詳細: ${ensured.reason}`);
-      return;
+    const auth = sessionData.session.user;
+    let friendId = getFriendIdFromUserMetadata(auth.user_metadata);
+    const { data: myProfile } = await supabase
+      .from("profiles")
+      .select("friend_id")
+      .eq("user_id", auth.id)
+      .maybeSingle();
+    if (!friendId && myProfile) {
+      friendId = ((myProfile as { friend_id?: string }).friend_id ?? "").toUpperCase();
     }
-    await syncCurrentUserPublicProfile();
-
-    const { data: refreshed } = await supabase.auth.getUser();
-    const friendId = getFriendIdFromUserMetadata(refreshed.user?.user_metadata);
-    setMe({ userId: auth.user.id, friendId });
+    setMe({ userId: auth.id, friendId });
 
     const { data: relData, error: relError } = await supabase
       .from("friendships")
       .select("user_low_id, user_high_id")
-      .or(`user_low_id.eq.${auth.user.id},user_high_id.eq.${auth.user.id}`);
+      .or(`user_low_id.eq.${auth.id},user_high_id.eq.${auth.id}`);
     if (relError) {
       setStatus(`フレンド一覧取得に失敗しました。詳細: ${relError.message}`);
       return;
     }
 
     const relRows = (relData ?? []) as FriendshipRow[];
-    const friendUserIds = relRows.map(row => (row.user_low_id === auth.user.id ? row.user_high_id : row.user_low_id));
+    const friendUserIds = relRows.map(row => (row.user_low_id === auth.id ? row.user_high_id : row.user_low_id));
     if (friendUserIds.length > 0) {
       const { data: profileRows, error: profError } = await supabase
         .from("profiles")
@@ -88,7 +84,7 @@ export default function FriendsPage() {
     const { data: reqRows, error: reqError } = await supabase
       .from("friend_requests")
       .select("id, from_user_id, created_at")
-      .eq("to_user_id", auth.user.id)
+      .eq("to_user_id", auth.id)
       .eq("status", "pending")
       .order("created_at", { ascending: false });
     if (reqError) {

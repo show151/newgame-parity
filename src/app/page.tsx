@@ -13,8 +13,8 @@ export default function Home() {
 
   useEffect(() => {
     const refresh = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
         setAuthLink({ href: "/profile", label: "プロフィール" });
         setIsLoggedIn(true);
       } else {

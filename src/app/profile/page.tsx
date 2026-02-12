@@ -5,13 +5,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  ensureFriendIdForCurrentUser,
   loadCurrentProfilePrefsFromProfiles,
   loadIconImageDataUrlFromProfiles,
   getProfilePrefsFromUserMetadata,
   saveIconImageDataUrlToProfiles,
   saveClipPrefsToSupabase,
-  syncCurrentUserPublicProfile,
 } from "@/lib/profilePrefs";
 
 type MatchRow = {
@@ -48,15 +46,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     (async () => {
-      const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || !auth.user) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.user) {
         router.replace("/login");
         return;
       }
-      await ensureFriendIdForCurrentUser();
-      await syncCurrentUserPublicProfile();
-      const { data: refreshed } = await supabase.auth.getUser();
-      const currentUser = refreshed.user ?? auth.user;
+      const currentUser = sessionData.session.user;
 
       setUserId(currentUser.id);
       setEmail(currentUser.email ?? "");
@@ -125,7 +120,21 @@ export default function ProfilePage() {
         setStatus(`プロフィール保存に失敗しました。詳細: ${error.message}`);
         return;
       }
-      await syncCurrentUserPublicProfile();
+      if (userId) {
+        const { error: profileError } = await supabase.from("profiles").upsert(
+          {
+            user_id: userId,
+            display_name: displayName.trim(),
+            status_message: statusMessage.trim(),
+            icon_text: iconText.trim().slice(0, 2),
+          },
+          { onConflict: "user_id" },
+        );
+        if (profileError) {
+          setStatus(`公開プロフィール同期に失敗しました。詳細: ${profileError.message}`);
+          return;
+        }
+      }
       setStatus("プロフィールを保存しました。");
     } finally {
       setSaving(false);
