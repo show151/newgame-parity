@@ -3,6 +3,13 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  getFeaturedMatchIds,
+  getMatchNames,
+  removeMatchFromPrefs,
+  setMatchName,
+  toggleFeaturedMatch,
+} from "@/lib/profilePrefs";
 
 type MatchRow = {
   id: string;
@@ -41,9 +48,13 @@ function saveStarred(starred: Set<string>) {
 
 export default function HistoryPage() {
   const [status, setStatus] = useState<string>("");
+  const [userId, setUserId] = useState<string | null>(null);
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [starred, setStarred] = useState<Set<string>>(() => loadStarred());
+  const [featured, setFeatured] = useState<Set<string>>(new Set());
+  const [matchNames, setMatchNames] = useState<Record<string, string>>({});
+  const [draftNames, setDraftNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -57,6 +68,10 @@ export default function HistoryPage() {
           setStatus("未ログインです。ログインすると保存棋譜を見られます。");
           return;
         }
+        setUserId(auth.user.id);
+        const names = getMatchNames(auth.user.id);
+        setMatchNames(names);
+        setFeatured(new Set(getFeaturedMatchIds(auth.user.id)));
 
         const { data, error } = await supabase
           .from("matches")
@@ -72,6 +87,11 @@ export default function HistoryPage() {
 
         const list = (data ?? []) as MatchRow[];
         setRows(list);
+        const nextDrafts: Record<string, string> = {};
+        for (const row of list) {
+          nextDrafts[row.id] = names[row.id] ?? "";
+        }
+        setDraftNames(nextDrafts);
         setStatus(list.length === 0 ? "保存棋譜がまだありません。" : "");
       } catch (err) {
         setStatus(toHistoryErrorMessage(err));
@@ -98,6 +118,27 @@ export default function HistoryPage() {
     });
   };
 
+  const saveName = (matchId: string) => {
+    if (!userId) return;
+    const raw = draftNames[matchId] ?? "";
+    setMatchName(userId, matchId, raw);
+    const nextNames = getMatchNames(userId);
+    setMatchNames(nextNames);
+    setDraftNames(prev => ({ ...prev, [matchId]: nextNames[matchId] ?? "" }));
+    setStatus("棋譜名を保存しました。");
+  };
+
+  const toggleFeatured = (matchId: string) => {
+    if (!userId) return;
+    const result = toggleFeaturedMatch(userId, matchId);
+    if (!result.ok) {
+      setStatus("プロフィール掲載は最大3件までです。");
+      return;
+    }
+    setFeatured(new Set(result.featuredIds));
+    setStatus(result.featuredIds.includes(matchId) ? "プロフィール掲載に追加しました。" : "プロフィール掲載から外しました。");
+  };
+
   return (
     <main style={{ padding: 24, display: "grid", gap: 12, justifyItems: "center" }}>
       <div style={{ width: "100%", maxWidth: 720, position: "relative", textAlign: "center" }}>
@@ -120,6 +161,8 @@ export default function HistoryPage() {
       <ul style={{ display: "grid", gap: 8, width: "100%", maxWidth: 720 }}>
         {sortedRows.map(r => {
           const isStarred = starred.has(r.id);
+          const isFeatured = featured.has(r.id);
+          const displayName = matchNames[r.id] || "（名前なし）";
           return (
             <li key={r.id} style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -131,6 +174,25 @@ export default function HistoryPage() {
                   title={isStarred ? "お気に入りを解除" : "お気に入りに追加"}
                 >
                   {isStarred ? "★ お気に入り" : "☆ お気に入り"}
+                </button>
+              </div>
+              <div style={{ marginTop: 6, marginBottom: 6 }}>
+                <b>棋譜名:</b> {displayName}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                <input
+                  value={draftNames[r.id] ?? ""}
+                  onChange={e => setDraftNames(prev => ({ ...prev, [r.id]: e.target.value }))}
+                  placeholder="棋譜名を入力"
+                  style={inputStyle}
+                />
+                <button style={btnStyle} onClick={() => saveName(r.id)}>名前を保存</button>
+                <button
+                  style={btnStyle}
+                  onClick={() => toggleFeatured(r.id)}
+                  title={isFeatured ? "プロフィール掲載から外す" : "プロフィール掲載に追加"}
+                >
+                  {isFeatured ? "掲載中（プロフィール）" : "プロフィールに掲載"}
                 </button>
               </div>
               <div>勝者: {r.winner === "p1" ? "先手" : "後手"} / 手数: {r.moves_count}</div>
@@ -156,6 +218,11 @@ export default function HistoryPage() {
                       setStatus(next.length === 0 ? "保存棋譜がまだありません。" : "");
                       return next;
                     });
+                    if (userId) {
+                      removeMatchFromPrefs(userId, r.id);
+                      setMatchNames(getMatchNames(userId));
+                      setFeatured(new Set(getFeaturedMatchIds(userId)));
+                    }
                     setStarred(prev => {
                       const next = new Set(prev);
                       if (next.has(r.id)) {
@@ -186,4 +253,13 @@ const btnStyle: React.CSSProperties = {
   textDecoration: "none",
   cursor: "pointer",
   boxShadow: "0 2px 0 rgba(120, 80, 40, 0.25)",
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 10,
+  border: "1px solid var(--line)",
+  minWidth: 220,
+  flex: "1 1 220px",
+  background: "rgba(255,255,255,0.9)",
 };

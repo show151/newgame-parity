@@ -5,6 +5,8 @@ import Link from "next/link";
 import Board from "@/components/Board";
 import { applyMove, emptyBoard, type Player } from "@/lib/gameLogic";
 import { saveMatchToSupabase, type MoveRecord } from "@/lib/saveMatch";
+import { supabase } from "@/lib/supabaseClient";
+import { getFeaturedMatchIds } from "@/lib/profilePrefs";
 
 type Snapshot = {
   board: number[];
@@ -93,22 +95,32 @@ export default function PlayPage() {
     }
 
     setSaving(true);
-    let protectedMatchIds: string[] = [];
+    const protectedIdsSet = new Set<string>();
     try {
       const raw = window.localStorage.getItem("hisei_starred_matches");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) protectedMatchIds = parsed.filter(x => typeof x === "string");
+        if (Array.isArray(parsed)) {
+          for (const id of parsed) {
+            if (typeof id === "string") protectedIdsSet.add(id);
+          }
+        }
       }
     } catch {
       // ignore localStorage parse error
+    }
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth.user) {
+      for (const id of getFeaturedMatchIds(auth.user.id)) {
+        protectedIdsSet.add(id);
+      }
     }
 
     const res = await saveMatchToSupabase({
       winner,
       final_board: current.board,
       moves,
-      protectedMatchIds,
+      protectedMatchIds: Array.from(protectedIdsSet),
     });
     setSaving(false);
 

@@ -1,6 +1,40 @@
+"use client";
+
 import Link from "next/link";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
+  const [authLink, setAuthLink] = useState<{ href: string; label: string }>({
+    href: "/login",
+    label: "ログイン",
+  });
+
+  useEffect(() => {
+    const refresh = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data.user) {
+        setAuthLink({ href: "/profile", label: "プロフィール" });
+      } else {
+        setAuthLink({ href: "/login", label: "ログイン" });
+      }
+    };
+
+    refresh();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAuthLink({ href: "/profile", label: "プロフィール" });
+      } else {
+        setAuthLink({ href: "/login", label: "ログイン" });
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
   const linkStyle: React.CSSProperties = {
     padding: "10px 14px",
     borderRadius: 12,
@@ -22,7 +56,7 @@ export default function Home() {
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
         <Link href="/hajimeni" style={linkStyle}>初めに</Link>
         <Link href="/play" style={linkStyle}>対局を始める</Link>
-        <Link href="/login" style={linkStyle}>ログイン</Link>
+        <Link href={authLink.href} style={linkStyle}>{authLink.label}</Link>
         <Link href="/tutorial" style={linkStyle}>チュートリアル</Link>
         <Link href="/history" style={linkStyle}>保存棋譜（ログイン時）</Link>
       </div>
