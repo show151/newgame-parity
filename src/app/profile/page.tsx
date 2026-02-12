@@ -42,6 +42,7 @@ export default function ProfilePage() {
   const [iconText, setIconText] = useState("");
   const [iconImageDataUrl, setIconImageDataUrl] = useState("");
   const [iconImageStatus, setIconImageStatus] = useState("");
+  const [iconFileName, setIconFileName] = useState("");
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [clipsEditOpen, setClipsEditOpen] = useState(false);
 
@@ -241,30 +242,38 @@ export default function ProfilePage() {
             </label>
             <label style={{ display: "grid", gap: 6 }}>
               <span>アイコン画像（任意）</span>
-              <input
-                type="file"
-                accept="image/*"
-                style={{ width: "100%", maxWidth: "100%" }}
-                onChange={async e => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    const dataUrl = await resizeImageToDataUrl(file);
-                    setIconImageDataUrl(dataUrl);
-                    setIconImageStatus("画像を設定しました。保存で反映されます。");
-                  } catch {
-                    setIconImageStatus("画像の読み込みに失敗しました。");
-                  } finally {
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
+              <label style={filePickLabelStyle}>
+                画像を選ぶ
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={hiddenFileInputStyle}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setIconFileName(file.name);
+                    try {
+                      const dataUrl = await resizeImageToDataUrl(file);
+                      setIconImageDataUrl(dataUrl);
+                      setIconImageStatus("画像を設定しました。保存で反映されます。");
+                    } catch {
+                      setIconImageStatus("画像の読み込みに失敗しました。");
+                    } finally {
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                />
+              </label>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                {iconFileName ? `選択中: ${iconFileName}` : "未選択"}
+              </div>
             </label>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 style={btnStyle}
                 onClick={() => {
                   setIconImageDataUrl("");
+                  setIconFileName("");
                   setIconImageStatus("画像アイコンを解除しました。");
                 }}
               >
@@ -512,4 +521,26 @@ const profileTopStyle: React.CSSProperties = {
   gridTemplateColumns: "minmax(72px, 96px) 1fr",
   gap: 14,
   alignItems: "start",
+};
+
+const filePickLabelStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  padding: "8px 12px",
+  borderRadius: 12,
+  border: "1px solid var(--line)",
+  background: "linear-gradient(180deg, #fff8ec 0%, #f1dfbf 100%)",
+  boxShadow: "0 2px 0 rgba(120, 80, 40, 0.25)",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const hiddenFileInputStyle: React.CSSProperties = {
+  position: "absolute",
+  opacity: 0,
+  pointerEvents: "none",
+  width: 1,
+  height: 1,
 };

@@ -9,6 +9,9 @@ type ProfileRow = {
   user_id: string;
   friend_id: string;
   display_name: string;
+  status_message?: string;
+  icon_text?: string;
+  icon_image_data_url?: string;
 };
 
 type IncomingRequestRow = {
@@ -32,6 +35,7 @@ export default function FriendsPage() {
   const [loading, setLoading] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
+  const [openedFriendMenuId, setOpenedFriendMenuId] = useState<string | null>(null);
 
   const myFriendId = me?.friendId ?? "";
   const myUserId = me?.userId ?? "";
@@ -70,7 +74,7 @@ export default function FriendsPage() {
     if (friendUserIds.length > 0) {
       const { data: profileRows, error: profError } = await supabase
         .from("profiles")
-        .select("user_id, friend_id, display_name")
+        .select("user_id, friend_id, display_name, status_message, icon_text, icon_image_data_url")
         .in("user_id", friendUserIds);
       if (profError) {
         setStatus(`フレンドプロフィール取得に失敗しました。詳細: ${profError.message}`);
@@ -97,7 +101,7 @@ export default function FriendsPage() {
       const fromIds = pending.map(r => r.from_user_id);
       const { data: fromProfiles } = await supabase
         .from("profiles")
-        .select("user_id, friend_id, display_name")
+        .select("user_id, friend_id, display_name, status_message, icon_text, icon_image_data_url")
         .in("user_id", fromIds);
       const map = new Map((fromProfiles ?? []).map(p => [p.user_id, p as ProfileRow]));
       setIncoming(pending.map(r => ({ ...r, fromProfile: map.get(r.from_user_id) })));
@@ -119,7 +123,7 @@ export default function FriendsPage() {
     setStatus("");
     const { data, error } = await supabase
       .from("profiles")
-      .select("user_id, friend_id, display_name")
+      .select("user_id, friend_id, display_name, status_message, icon_text, icon_image_data_url")
       .eq("friend_id", target)
       .maybeSingle();
     setLoading(false);
@@ -272,16 +276,26 @@ export default function FriendsPage() {
         <ul style={{ display: "grid", gap: 8, paddingLeft: 18, margin: 0 }}>
           {friends.map(fr => (
             <li key={fr.user_id}>
-              <div><b>{fr.display_name || "（名前未設定）"}</b></div>
+              <button
+                style={friendHeaderButtonStyle}
+                onClick={() => setOpenedFriendMenuId(prev => (prev === fr.user_id ? null : fr.user_id))}
+                aria-expanded={openedFriendMenuId === fr.user_id}
+              >
+                <Avatar iconText={fr.icon_text ?? ""} iconImageDataUrl={fr.icon_image_data_url ?? ""} displayName={fr.display_name || "?"} />
+                <b style={{ textAlign: "left" }}>{fr.display_name || "（名前未設定）"}</b>
+              </button>
+              <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>{fr.status_message || "（ステータスメッセージ未設定）"}</div>
               <div style={{ fontSize: 13, color: "#666" }}>ID: {fr.friend_id}</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                <Link href={`/friends/${fr.friend_id}`} style={{ ...btnStyle, display: "inline-block" }}>
-                  プロフィールを見る
-                </Link>
-                <button style={btnStyle} onClick={() => removeFriend(fr.user_id, fr.display_name)}>
-                  フレンド削除
-                </button>
-              </div>
+              {openedFriendMenuId === fr.user_id && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                  <Link href={`/friends/${fr.friend_id}`} style={{ ...btnStyle, display: "inline-block" }}>
+                    プロフィールを見る
+                  </Link>
+                  <button style={btnStyle} onClick={() => removeFriend(fr.user_id, fr.display_name)}>
+                    フレンド削除
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -297,6 +311,15 @@ export default function FriendsPage() {
       )}
     </main>
   );
+}
+
+function Avatar(props: { iconText: string; iconImageDataUrl: string; displayName: string }) {
+  if (props.iconImageDataUrl) {
+    return <img src={props.iconImageDataUrl} alt="icon" style={{ ...avatarStyle, objectFit: "cover", borderRadius: "50%" }} />;
+  }
+  const fallback = props.displayName.trim().slice(0, 1).toUpperCase() || "?";
+  const text = (props.iconText.trim() || fallback).slice(0, 2);
+  return <div style={avatarStyle}>{text}</div>;
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -356,4 +379,29 @@ const alertBadgeStyle: React.CSSProperties = {
   placeItems: "center",
   fontSize: 12,
   fontWeight: 800,
+};
+
+const avatarStyle: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: "50%",
+  border: "1px solid #8f6337",
+  background: "linear-gradient(180deg, #f8e9d3 0%, #e7c39a 100%)",
+  color: "#5d3d1d",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 800,
+  fontSize: 14,
+};
+
+const friendHeaderButtonStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  cursor: "pointer",
+  color: "inherit",
+  font: "inherit",
 };
