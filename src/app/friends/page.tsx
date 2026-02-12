@@ -382,8 +382,8 @@ const alertBadgeStyle: React.CSSProperties = {
 };
 
 const avatarStyle: React.CSSProperties = {
-  width: 30,
-  height: 30,
+  width: 39,
+  height: 39,
   borderRadius: "50%",
   border: "1px solid #8f6337",
   background: "linear-gradient(180deg, #f8e9d3 0%, #e7c39a 100%)",
@@ -391,7 +391,7 @@ const avatarStyle: React.CSSProperties = {
   display: "grid",
   placeItems: "center",
   fontWeight: 800,
-  fontSize: 14,
+  fontSize: 18,
 };
 
 const friendHeaderButtonStyle: React.CSSProperties = {
