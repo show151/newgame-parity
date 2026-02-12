@@ -5,8 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
   ensureFriendIdForCurrentUser,
-  getClipPrefsFromUserMetadata,
-  getMatchNamesFromUserMetadata,
+  loadCurrentProfilePrefsFromProfiles,
   saveClipPrefsToSupabase,
   saveMatchNamesToSupabase,
   syncCurrentUserPublicProfile,
@@ -56,11 +55,16 @@ export default function HistoryPage() {
         const { data: refreshed } = await supabase.auth.getUser();
         const user = refreshed.user ?? auth.user;
         setUserId(auth.user.id);
-        const names = getMatchNamesFromUserMetadata(user.user_metadata);
-        const clipPrefs = getClipPrefsFromUserMetadata(user.user_metadata);
-        setMatchNames(names);
-        setStarred(new Set(clipPrefs.starredIds));
-        setFeatured(new Set(clipPrefs.featuredIds));
+        const loaded = await loadCurrentProfilePrefsFromProfiles();
+        if (loaded.ok) {
+          setMatchNames(loaded.prefs.matchNames);
+          setStarred(new Set(loaded.prefs.starredIds));
+          setFeatured(new Set(loaded.prefs.featuredIds));
+        } else {
+          setMatchNames({});
+          setStarred(new Set());
+          setFeatured(new Set());
+        }
 
         const { data, error } = await supabase
           .from("matches")
@@ -78,7 +82,7 @@ export default function HistoryPage() {
         setRows(list);
         const nextDrafts: Record<string, string> = {};
         for (const row of list) {
-          nextDrafts[row.id] = names[row.id] ?? "";
+          nextDrafts[row.id] = (loaded.ok ? loaded.prefs.matchNames[row.id] : "") ?? "";
         }
         setDraftNames(nextDrafts);
         setStatus(list.length === 0 ? "保存棋譜がまだありません。" : "");

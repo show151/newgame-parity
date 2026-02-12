@@ -6,7 +6,7 @@ import Board from "@/components/Board";
 import { applyMove, emptyBoard, type Player } from "@/lib/gameLogic";
 import { saveMatchToSupabase, type MoveRecord } from "@/lib/saveMatch";
 import { supabase } from "@/lib/supabaseClient";
-import { getClipPrefsFromUserMetadata } from "@/lib/profilePrefs";
+import { loadCurrentProfilePrefsFromProfiles } from "@/lib/profilePrefs";
 
 type Snapshot = {
   board: number[];
@@ -97,11 +97,10 @@ export default function PlayPage() {
     setSaving(true);
     const protectedIdsSet = new Set<string>();
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth.user) {
-        const clipPrefs = getClipPrefsFromUserMetadata(auth.user.user_metadata);
-        for (const id of clipPrefs.starredIds) protectedIdsSet.add(id);
-        for (const id of clipPrefs.featuredIds) protectedIdsSet.add(id);
+      const loaded = await loadCurrentProfilePrefsFromProfiles();
+      if (loaded.ok) {
+        for (const id of loaded.prefs.starredIds) protectedIdsSet.add(id);
+        for (const id of loaded.prefs.featuredIds) protectedIdsSet.add(id);
       }
     } catch {
       // ignore auth / metadata fetch errors

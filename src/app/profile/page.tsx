@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   ensureFriendIdForCurrentUser,
-  getClipPrefsFromUserMetadata,
-  getMatchNamesFromUserMetadata,
+  loadCurrentProfilePrefsFromProfiles,
   loadIconImageDataUrlFromProfiles,
   getProfilePrefsFromUserMetadata,
   saveIconImageDataUrlToProfiles,
@@ -67,11 +66,16 @@ export default function ProfilePage() {
       setStatusMessage(meta.status_message ?? "");
 
       const profilePrefs = getProfilePrefsFromUserMetadata(currentUser.user_metadata);
-      const names = getMatchNamesFromUserMetadata(currentUser.user_metadata);
-      const clipPrefs = getClipPrefsFromUserMetadata(currentUser.user_metadata);
-      setMatchNames(names);
-      setFeaturedIds(clipPrefs.featuredIds);
-      setStarredIdsForSave(clipPrefs.starredIds);
+      const loaded = await loadCurrentProfilePrefsFromProfiles();
+      if (loaded.ok) {
+        setMatchNames(loaded.prefs.matchNames);
+        setFeaturedIds(loaded.prefs.featuredIds);
+        setStarredIdsForSave(loaded.prefs.starredIds);
+      } else {
+        setMatchNames({});
+        setFeaturedIds([]);
+        setStarredIdsForSave([]);
+      }
       setIconText(profilePrefs.iconText);
       const iconRes = await loadIconImageDataUrlFromProfiles();
       if (iconRes.ok) setIconImageDataUrl(iconRes.iconImageDataUrl);
