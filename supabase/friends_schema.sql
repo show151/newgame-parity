@@ -90,6 +90,13 @@ for insert
 to authenticated
 with check (auth.uid() = user_low_id or auth.uid() = user_high_id);
 
+drop policy if exists friendships_delete_involved on public.friendships;
+create policy friendships_delete_involved
+on public.friendships
+for delete
+to authenticated
+using (auth.uid() = user_low_id or auth.uid() = user_high_id);
+
 -- Optional: allow friends to replay each other's matches and moves.
 -- If your matches/moves already have RLS, add these policies:
 drop policy if exists matches_select_owner_or_friend on public.matches;
