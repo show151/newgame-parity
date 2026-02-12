@@ -17,6 +17,7 @@ type MoveRow = {
 
 type MatchRow = {
   id: string;
+  user_id: string;
   winner: "p1" | "p2";
   moves_count: number;
   created_at: string;
@@ -53,14 +54,33 @@ export default function MatchReplayPage() {
 
         const { data: m, error: matchError } = await supabase
           .from("matches")
-          .select("id, winner, moves_count, created_at")
+          .select("id, user_id, winner, moves_count, created_at")
           .eq("id", matchId)
-          .eq("user_id", auth.user.id)
           .single();
 
         if (matchError) {
           setStatus(toReplayError(matchError));
           return;
+        }
+        const matchOwnerId = (m as MatchRow).user_id;
+        const isOwner = matchOwnerId === auth.user.id;
+        if (!isOwner) {
+          const low = auth.user.id < matchOwnerId ? auth.user.id : matchOwnerId;
+          const high = auth.user.id < matchOwnerId ? matchOwnerId : auth.user.id;
+          const { data: fr, error: frError } = await supabase
+            .from("friendships")
+            .select("user_low_id")
+            .eq("user_low_id", low)
+            .eq("user_high_id", high)
+            .maybeSingle();
+          if (frError) {
+            setStatus(`閲覧権限の確認に失敗しました。詳細: ${frError.message}`);
+            return;
+          }
+          if (!fr) {
+            setStatus("この棋譜はフレンドのみ閲覧できます。");
+            return;
+          }
         }
 
         const { data: mv, error: movesError } = await supabase

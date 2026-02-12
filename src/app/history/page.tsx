@@ -4,10 +4,12 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import {
+  ensureFriendIdForCurrentUser,
   getClipPrefsFromUserMetadata,
   getMatchNamesFromUserMetadata,
   saveClipPrefsToSupabase,
   saveMatchNamesToSupabase,
+  syncCurrentUserPublicProfile,
 } from "@/lib/profilePrefs";
 
 type MatchRow = {
@@ -49,9 +51,13 @@ export default function HistoryPage() {
           setStatus("未ログインです。ログインすると保存棋譜を見られます。");
           return;
         }
+        await ensureFriendIdForCurrentUser();
+        await syncCurrentUserPublicProfile();
+        const { data: refreshed } = await supabase.auth.getUser();
+        const user = refreshed.user ?? auth.user;
         setUserId(auth.user.id);
-        const names = getMatchNamesFromUserMetadata(auth.user.user_metadata);
-        const clipPrefs = getClipPrefsFromUserMetadata(auth.user.user_metadata);
+        const names = getMatchNamesFromUserMetadata(user.user_metadata);
+        const clipPrefs = getClipPrefsFromUserMetadata(user.user_metadata);
         setMatchNames(names);
         setStarred(new Set(clipPrefs.starredIds));
         setFeatured(new Set(clipPrefs.featuredIds));
@@ -157,10 +163,10 @@ export default function HistoryPage() {
   };
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 12, justifyItems: "center" }}>
-      <div style={{ width: "100%", maxWidth: 720, position: "relative", textAlign: "center" }}>
+    <main style={{ padding: "clamp(12px, 4vw, 24px)", display: "grid", gap: 12, justifyItems: "center" }}>
+      <div style={{ width: "100%", maxWidth: 720, display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", boxSizing: "border-box" }}>
         <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>保存棋譜</h1>
-        <div style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
           保存数 {rows.length}/30
         </div>
       </div>
@@ -170,7 +176,7 @@ export default function HistoryPage() {
       </div>
 
       {status && (
-        <div style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)", width: "100%", maxWidth: 720 }}>
+        <div style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)", width: "100%", maxWidth: 720, boxSizing: "border-box" }}>
           {status}
         </div>
       )}
@@ -182,7 +188,7 @@ export default function HistoryPage() {
           const isEditing = editingIds.has(r.id);
           const displayName = matchNames[r.id] || "（名前なし）";
           return (
-            <li key={r.id} style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)" }}>
+            <li key={r.id} style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)", boxSizing: "border-box", width: "100%" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ display: "grid", gap: 4 }}>
                   <b>{displayName}</b>
@@ -310,9 +316,11 @@ const inputStyle: React.CSSProperties = {
   padding: "6px 10px",
   borderRadius: 10,
   border: "1px solid var(--line)",
-  minWidth: 220,
-  flex: "1 1 220px",
+  minWidth: 0,
+  width: "100%",
+  flex: "1 1 180px",
   background: "rgba(255,255,255,0.9)",
+  boxSizing: "border-box",
 };
 
 const badgeStyle: React.CSSProperties = {

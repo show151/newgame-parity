@@ -5,11 +5,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
+  ensureFriendIdForCurrentUser,
   getClipPrefsFromUserMetadata,
   getMatchNamesFromUserMetadata,
   normalizeAvatarImageDataUrl,
   getProfilePrefsFromUserMetadata,
   saveClipPrefsToSupabase,
+  syncCurrentUserPublicProfile,
 } from "@/lib/profilePrefs";
 
 type MatchRow = {
@@ -51,17 +53,21 @@ export default function ProfilePage() {
         router.replace("/login");
         return;
       }
+      await ensureFriendIdForCurrentUser();
+      await syncCurrentUserPublicProfile();
+      const { data: refreshed } = await supabase.auth.getUser();
+      const currentUser = refreshed.user ?? auth.user;
 
-      setUserId(auth.user.id);
-      setEmail(auth.user.email ?? "");
+      setUserId(currentUser.id);
+      setEmail(currentUser.email ?? "");
 
-      const meta = (auth.user.user_metadata ?? {}) as UserMeta;
+      const meta = (currentUser.user_metadata ?? {}) as UserMeta;
       setDisplayName(meta.display_name ?? "");
       setStatusMessage(meta.status_message ?? "");
 
-      const profilePrefs = getProfilePrefsFromUserMetadata(auth.user.user_metadata);
-      const names = getMatchNamesFromUserMetadata(auth.user.user_metadata);
-      const clipPrefs = getClipPrefsFromUserMetadata(auth.user.user_metadata);
+      const profilePrefs = getProfilePrefsFromUserMetadata(currentUser.user_metadata);
+      const names = getMatchNamesFromUserMetadata(currentUser.user_metadata);
+      const clipPrefs = getClipPrefsFromUserMetadata(currentUser.user_metadata);
       setMatchNames(names);
       setFeaturedIds(clipPrefs.featuredIds);
       setStarredIdsForSave(clipPrefs.starredIds);
@@ -71,7 +77,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from("matches")
         .select("id, created_at, winner, moves_count, final_board")
-        .eq("user_id", auth.user.id)
+        .eq("user_id", currentUser.id)
         .order("created_at", { ascending: false })
         .limit(30);
 
@@ -106,6 +112,7 @@ export default function ProfilePage() {
         setStatus(`プロフィール保存に失敗しました。詳細: ${error.message}`);
         return;
       }
+      await syncCurrentUserPublicProfile();
       setStatus("プロフィールを保存しました。");
     } finally {
       setSaving(false);
@@ -155,7 +162,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <main style={{ padding: 24, display: "grid", gap: 12, justifyItems: "center" }}>
+    <main style={{ padding: "clamp(12px, 4vw, 24px)", display: "grid", gap: 12, justifyItems: "center" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>プロフィール</h1>
 
       <section style={sectionStyle}>
@@ -167,7 +174,7 @@ export default function ProfilePage() {
         </div>
         <div style={profileTopStyle}>
           <Avatar iconText={iconText} iconImageDataUrl={iconImageDataUrl} displayName={displayName} email={email} />
-          <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
+          <div style={{ display: "grid", gap: 6, alignContent: "start", overflowWrap: "anywhere" }}>
             <div style={{ fontSize: 22, fontWeight: 800 }}>{displayName || "（未設定）"}</div>
             <div style={{ fontSize: 14, color: "#555" }}>{statusMessage || "（ステータスメッセージ未設定）"}</div>
           </div>
@@ -197,6 +204,7 @@ export default function ProfilePage() {
               <input
                 type="file"
                 accept="image/*"
+                style={{ width: "100%", maxWidth: "100%" }}
                 onChange={async e => {
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -286,10 +294,11 @@ export default function ProfilePage() {
         )}
       </section>
 
-      <div style={{ width: "100%", maxWidth: 760, display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 760, display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", boxSizing: "border-box" }}>
         <button onClick={logout} disabled={loggingOut} style={btnStyle}>
           {loggingOut ? "ログアウト中..." : "ログアウト"}
         </button>
+        <Link href="/friends" style={btnStyle}>フレンド</Link>
         <Link href="/" style={btnStyle}>ホームへ戻る</Link>
         <Link href="/history" style={btnStyle}>保存棋譜へ</Link>
       </div>
@@ -384,6 +393,7 @@ const sectionStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
   borderRadius: 12,
   background: "rgba(255,255,255,0.6)",
+  boxSizing: "border-box",
 };
 
 const btnStyle: React.CSSProperties = {
@@ -459,7 +469,7 @@ const avatarStyle: React.CSSProperties = {
 
 const profileTopStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "auto 1fr",
+  gridTemplateColumns: "minmax(72px, 96px) 1fr",
   gap: 14,
   alignItems: "start",
 };

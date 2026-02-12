@@ -9,14 +9,17 @@ export default function Home() {
     href: "/login",
     label: "ログイン",
   });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     const refresh = async () => {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
         setAuthLink({ href: "/profile", label: "プロフィール" });
+        setIsLoggedIn(true);
       } else {
         setAuthLink({ href: "/login", label: "ログイン" });
+        setIsLoggedIn(false);
       }
     };
 
@@ -25,8 +28,10 @@ export default function Home() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setAuthLink({ href: "/profile", label: "プロフィール" });
+        setIsLoggedIn(true);
       } else {
         setAuthLink({ href: "/login", label: "ログイン" });
+        setIsLoggedIn(false);
       }
     });
 
@@ -57,6 +62,7 @@ export default function Home() {
         <Link href="/hajimeni" style={linkStyle}>初めに</Link>
         <Link href="/play" style={linkStyle}>対局を始める</Link>
         <Link href={authLink.href} style={linkStyle}>{authLink.label}</Link>
+        {isLoggedIn && <Link href="/friends" style={linkStyle}>フレンド</Link>}
         <Link href="/tutorial" style={linkStyle}>チュートリアル</Link>
         <Link href="/history" style={linkStyle}>保存棋譜（ログイン時）</Link>
       </div>

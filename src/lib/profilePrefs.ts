@@ -64,6 +64,62 @@ export function getProfilePrefsFromUserMetadata(metadata: unknown): ProfilePrefs
   };
 }
 
+export function getFriendIdFromUserMetadata(metadata: unknown): string {
+  const meta = (metadata ?? {}) as { friend_id?: unknown };
+  if (typeof meta.friend_id !== "string") return "";
+  return meta.friend_id.trim().toUpperCase();
+}
+
+function normalizeFriendId(value: string): string {
+  return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 12);
+}
+
+function randomFriendId(): string {
+  const part = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `HS${part.slice(0, 8)}`;
+}
+
+export async function ensureFriendIdForCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return { ok: false as const, reason: error?.message ?? "not logged in" };
+
+  const current = normalizeFriendId(getFriendIdFromUserMetadata(data.user.user_metadata));
+  if (current) return { ok: true as const, friendId: current };
+
+  const nextId = randomFriendId();
+  const { error: updateError } = await supabase.auth.updateUser({
+    data: { friend_id: nextId },
+  });
+  if (updateError) return { ok: false as const, reason: updateError.message };
+  return { ok: true as const, friendId: nextId };
+}
+
+export async function syncCurrentUserPublicProfile() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    return { ok: false as const, reason: error?.message ?? "not logged in" };
+  }
+  const user = data.user;
+  const prefs = getProfilePrefsFromUserMetadata(user.user_metadata);
+  const friendId = getFriendIdFromUserMetadata(user.user_metadata);
+  if (!friendId) return { ok: false as const, reason: "friend_id is missing" };
+
+  const payload = {
+    user_id: user.id,
+    friend_id: friendId,
+    display_name: (user.user_metadata?.display_name as string | undefined) ?? "",
+    status_message: (user.user_metadata?.status_message as string | undefined) ?? "",
+    icon_text: prefs.iconText,
+    icon_image_data_url: prefs.iconImageDataUrl,
+    featured_match_ids: prefs.featuredIds,
+    match_names: prefs.matchNames,
+  };
+
+  const { error: upsertError } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
+  if (upsertError) return { ok: false as const, reason: upsertError.message };
+  return { ok: true as const };
+}
+
 export function getClipPrefsFromUserMetadata(metadata: unknown): ClipPrefs {
   const prefs = getProfilePrefsFromUserMetadata(metadata);
   return { starredIds: prefs.starredIds, featuredIds: prefs.featuredIds };
@@ -82,6 +138,8 @@ export async function saveClipPrefsToSupabase(args: {
   if (error) {
     return { ok: false as const, reason: error.message };
   }
+  const synced = await syncCurrentUserPublicProfile();
+  if (!synced.ok) return synced;
   return { ok: true as const };
 }
 
@@ -100,6 +158,8 @@ export async function saveMatchNamesToSupabase(matchNames: Record<string, string
     },
   });
   if (error) return { ok: false as const, reason: error.message };
+  const synced = await syncCurrentUserPublicProfile();
+  if (!synced.ok) return synced;
   return { ok: true as const };
 }
 
@@ -110,6 +170,8 @@ export async function saveIconTextToSupabase(iconText: string) {
     },
   });
   if (error) return { ok: false as const, reason: error.message };
+  const synced = await syncCurrentUserPublicProfile();
+  if (!synced.ok) return synced;
   return { ok: true as const };
 }
 
