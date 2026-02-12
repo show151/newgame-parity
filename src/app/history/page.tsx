@@ -43,11 +43,7 @@ export default function HistoryPage() {
   const [status, setStatus] = useState<string>("");
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [starred, setStarred] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    setStarred(loadStarred());
-  }, []);
+  const [starred, setStarred] = useState<Set<string>>(() => loadStarred());
 
   useEffect(() => {
     (async () => {

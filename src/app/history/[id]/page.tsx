@@ -129,6 +129,7 @@ export default function MatchReplayPage() {
             board={currentBoard}
             onClickCell={() => {}}
             lastChanged={currentChanged}
+            lastPlaced={currentMove?.pos}
             disabled
           />
 

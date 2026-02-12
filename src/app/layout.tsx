@@ -20,7 +20,7 @@ const hiseiMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "一正 (hisei)",
+  title: "一正 ～HISEI～",
   description: "紙ゲーに革命を起こす神ゲー。",
   icons: {
     icon: "/icon.svg",

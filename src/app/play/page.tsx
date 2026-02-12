@@ -28,6 +28,7 @@ export default function PlayPage() {
   const current = history[history.length - 1];
 
   const [lastChanged, setLastChanged] = useState<Set<number>>(new Set());
+  const [lastPlaced, setLastPlaced] = useState<number | undefined>(undefined);
   const [winner, setWinner] = useState<Player | null>(null);
   const [moves, setMoves] = useState<MoveRecord[]>([]);
   const [msg, setMsg] = useState("");
@@ -54,6 +55,7 @@ export default function PlayPage() {
     const nextTurn: Player = current.turn === "p1" ? "p2" : "p1";
     setHistory(prev => [...prev, { board: res.newBoard, turn: nextTurn }]);
     setLastChanged(new Set(res.changed.map(x => x.i)));
+    setLastPlaced(pos);
     setMsg("");
 
     const ply = moves.length + 1;
@@ -71,6 +73,7 @@ export default function PlayPage() {
     setHistory(prev => prev.slice(0, -1));
     setMoves(prev => prev.slice(0, -1));
     setLastChanged(new Set());
+    setLastPlaced(undefined);
     setMsg("");
   };
 
@@ -79,6 +82,7 @@ export default function PlayPage() {
     setHistory([{ board: emptyBoard(), turn: "p1" }]);
     setMoves([]);
     setLastChanged(new Set());
+    setLastPlaced(undefined);
     setMsg("");
   };
 
@@ -175,7 +179,7 @@ export default function PlayPage() {
         </div>
       )}
 
-      <Board board={current.board} onClickCell={onClickCell} lastChanged={lastChanged} disabled={!canPlay} />
+      <Board board={current.board} onClickCell={onClickCell} lastChanged={lastChanged} lastPlaced={lastPlaced} disabled={!canPlay} />
 
       <details style={{ width: "100%", maxWidth: 760 }} open={!isMobile ? undefined : false}>
         <summary style={{ cursor: "pointer", fontWeight: 700 }}>棋譜（手順）</summary>

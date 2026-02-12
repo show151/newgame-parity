@@ -38,8 +38,8 @@ export function getSupabase() {
 }
 
 // For backward compatibility, create a lazy proxy
-export const supabase = new Proxy({} as any, {
-  get: (target, prop) => {
-    return getSupabase()[prop as keyof typeof supabaseInstance];
+export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get: (_target, prop: string | symbol) => {
+    return getSupabase()[prop as keyof ReturnType<typeof createClient>];
   },
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Board from "@/components/Board";
 import { applyMove, emptyBoard, type Player } from "@/lib/gameLogic";
@@ -16,9 +17,9 @@ type Step = {
   successMessage: string;
 };
 
-const WIN_INTERVAL_MS = 4000;
+const WIN_INTERVAL_MS = 2500;
 const CAPTURE_INTERVAL_MS = 1000;
-const RITUAL_DELAY_MS = 500;
+const RITUAL_DELAY_MS = 1000;
 const CORNERS = [0, 4, 20, 24] as const;
 
 function makeBoard(values: Record<number, number>) {
@@ -127,27 +128,36 @@ export default function TutorialPage() {
   const [doneMsg, setDoneMsg] = useState("");
   const [completed, setCompleted] = useState(false);
   const [lastChanged, setLastChanged] = useState<Set<number>>(new Set());
+  const [lastPlaced, setLastPlaced] = useState<number | undefined>(undefined);
   const [ruleClicks, setRuleClicks] = useState<Set<string>>(new Set());
   const [ritualPhase, setRitualPhase] = useState<"first" | "wait1" | "takeDiag" | "wait2" | "done">("first");
   const [ritualSenteFirst, setRitualSenteFirst] = useState<number | null>(null);
   const [ritualGoteFirst, setRitualGoteFirst] = useState<number | null>(null);
   const timersRef = useRef<number[]>([]);
 
-  useEffect(() => {
-    const init = step.init();
+  const resetStepState = (nextStep: Step) => {
+    const init = nextStep.init();
+    timersRef.current.forEach(t => window.clearTimeout(t));
+    timersRef.current = [];
     setBoard(init.board);
     setTurn(init.turn);
     setMsg("");
     setDoneMsg("");
     setCompleted(false);
     setLastChanged(new Set());
+    setLastPlaced(undefined);
     setRuleClicks(new Set());
     setRitualPhase("first");
     setRitualSenteFirst(null);
     setRitualGoteFirst(null);
-    timersRef.current.forEach(t => window.clearTimeout(t));
-    timersRef.current = [];
-  }, [step]);
+  };
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(t => window.clearTimeout(t));
+      timersRef.current = [];
+    };
+  }, []);
 
   const runCaptureDemo = () => {
     timersRef.current.forEach(t => window.clearTimeout(t));
@@ -161,6 +171,7 @@ export default function TutorialPage() {
       const t = window.setTimeout(() => {
         setBoard(makeBoard(frame));
         setLastChanged(new Set(Object.keys(frame).map(k => Number(k))));
+        setLastPlaced(undefined);
       }, idx * CAPTURE_INTERVAL_MS);
       timersRef.current.push(t);
     });
@@ -178,9 +189,15 @@ export default function TutorialPage() {
       const t = window.setTimeout(() => {
         setBoard(makeBoard(frame));
         setLastChanged(new Set(Object.keys(frame).map(k => Number(k))));
+        setLastPlaced(undefined);
       }, idx * WIN_INTERVAL_MS);
       timersRef.current.push(t);
     });
+    // ループ再生
+    const loopTimer = window.setTimeout(() => {
+      runWinDemo();
+    }, frames.length * WIN_INTERVAL_MS);
+    timersRef.current.push(loopTimer);
   };
 
   const onClickRule = (
@@ -200,9 +217,11 @@ export default function TutorialPage() {
       } else if (boardValues) {
         setBoard(makeBoard(boardValues));
         setLastChanged(new Set(Object.keys(boardValues).map(k => Number(k))));
+        setLastPlaced(undefined);
       } else {
         setBoard(emptyBoard());
         setLastChanged(new Set());
+        setLastPlaced(undefined);
       }
       if (next.size === 4 && step.id === "rules") {
         setCompleted(true);
@@ -231,6 +250,7 @@ export default function TutorialPage() {
       }
       setBoard(first.newBoard);
       setLastChanged(new Set(first.changed.map(c => c.i)));
+      setLastPlaced(pos);
       setRitualSenteFirst(pos);
       setRitualPhase("wait1");
       setMsg("後手が、対角ではない角に一を置きます。");
@@ -243,6 +263,7 @@ export default function TutorialPage() {
           return next;
         });
         setLastChanged(new Set([gotePos]));
+        setLastPlaced(gotePos);
         setRitualGoteFirst(gotePos);
         setRitualPhase("takeDiag");
         setMsg("次に、あなたの初手角の対角を取ってください。");
@@ -264,6 +285,7 @@ export default function TutorialPage() {
       }
       setBoard(second.newBoard);
       setLastChanged(new Set(second.changed.map(c => c.i)));
+      setLastPlaced(pos);
       setRitualPhase("wait2");
       setMsg("後手が、初手角の対角に一を置きます。");
 
@@ -275,6 +297,7 @@ export default function TutorialPage() {
           return next;
         });
         setLastChanged(new Set([goteDiag]));
+        setLastPlaced(goteDiag);
         setRitualPhase("done");
         setCompleted(true);
         setDoneMsg("初め方は完璧です。");
@@ -303,6 +326,7 @@ export default function TutorialPage() {
     }
     setBoard(res.newBoard);
     setLastChanged(new Set(res.changed.map(c => c.i)));
+    setLastPlaced(pos);
     if (step.isSuccess(res)) {
       setCompleted(true);
       setMsg(step.successMessage);
@@ -313,28 +337,20 @@ export default function TutorialPage() {
 
   const goNext = () => {
     if (stepIndex >= steps.length - 1) return;
-    setStepIndex(i => i + 1);
+    const nextIndex = stepIndex + 1;
+    resetStepState(steps[nextIndex]);
+    setStepIndex(nextIndex);
   };
 
   const goPrev = () => {
     if (stepIndex <= 0) return;
-    setStepIndex(i => i - 1);
+    const prevIndex = stepIndex - 1;
+    resetStepState(steps[prevIndex]);
+    setStepIndex(prevIndex);
   };
 
   const resetStep = () => {
-    const init = step.init();
-    timersRef.current.forEach(t => window.clearTimeout(t));
-    timersRef.current = [];
-    setBoard(init.board);
-    setTurn(init.turn);
-    setMsg("");
-    setDoneMsg("");
-    setCompleted(false);
-    setLastChanged(new Set());
-    setRuleClicks(new Set());
-    setRitualPhase("first");
-    setRitualSenteFirst(null);
-    setRitualGoteFirst(null);
+    resetStepState(step);
   };
 
   return (
@@ -354,10 +370,10 @@ export default function TutorialPage() {
             <button onClick={() => onClickRule("gote", "後手は奇数画（1・3・5）です。", { 7: 1, 12: 3, 17: 5 })} style={btnStyle}>
               後手
             </button>
-            <button onClick={() => onClickRule("capture", "挟むと+1されます（最大5）。", undefined, "capture")} style={btnStyle}>
+            <button onClick={() => onClickRule("capture", "挟むと1画加算されます（正になると追加できません）。", undefined, "capture")} style={btnStyle}>
               取り込み
             </button>
-            <button onClick={() => onClickRule("win", "縦・横・斜めの1列が揃うと勝利です。", undefined, "win")} style={btnStyle}>
+            <button onClick={() => onClickRule("win", "縦・横・斜めの1列が偶数または奇数で揃うと勝利です。", undefined, "win")} style={btnStyle}>
               勝利条件
             </button>
           </div>
@@ -365,7 +381,7 @@ export default function TutorialPage() {
         </div>
       )}
 
-      <Board board={board} onClickCell={onClickCell} lastChanged={lastChanged} disabled={completed} />
+      <Board board={board} onClickCell={onClickCell} lastChanged={lastChanged} lastPlaced={lastPlaced} disabled={completed} />
 
       {msg && (
         <div style={{ padding: 12, border: "1px solid var(--line)", borderRadius: 12, background: "rgba(255,255,255,0.6)", width: "100%", maxWidth: 720 }}>
@@ -379,18 +395,18 @@ export default function TutorialPage() {
       )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-        <a href="/" style={btnStyle}>
-          ホームへ戻る
-        </a>
+        <button onClick={resetStep} style={btnStyle}>
+          手順をやり直す
+        </button>
         <button onClick={goPrev} disabled={stepIndex === 0} style={btnStyle}>
           前へ
-        </button>
-        <button onClick={resetStep} style={btnStyle}>
-          この手順をやり直す
         </button>
         <button onClick={goNext} disabled={!completed || stepIndex === steps.length - 1} style={btnStyle}>
           次へ
         </button>
+        <Link href="/" style={btnStyle}>
+          ホームへ戻る
+        </Link>
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
@@ -399,7 +415,11 @@ export default function TutorialPage() {
           return (
             <button
               key={s.id}
-              onClick={() => setStepIndex(i)}
+              onClick={() => {
+                if (i === stepIndex) return;
+                resetStepState(steps[i]);
+                setStepIndex(i);
+              }}
               style={{
                 ...btnStyle,
                 padding: "6px 10px",

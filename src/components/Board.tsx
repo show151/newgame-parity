@@ -7,10 +7,21 @@ type Props = {
   board: number[];
   onClickCell: (i: number) => void;
   lastChanged?: Set<number>;
+  lastPlaced?: number;
   disabled?: boolean;
 };
 
-export default function Board({ board, onClickCell, lastChanged, disabled }: Props) {
+const STROKE_ANIMATION = `
+@keyframes hisei-stroke-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+`;
+const STROKE_DURATION_SEC = 0.34;
+const DEFAULT_STROKE_STEP_DELAY_SEC = 0.1;
+
+export default function Board({ board, onClickCell, lastChanged, lastPlaced, disabled }: Props) {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -29,19 +40,39 @@ export default function Board({ board, onClickCell, lastChanged, disabled }: Pro
   const gap = isMobile ? "4px" : "min(8px, 2vw)";
   const pad = isMobile ? "8px" : "min(10px, 2.5vw)";
 
-  const renderMark = (v: number) => {
+  const renderMark = (v: number, animateFrom: number | null, baseDelaySec = 0, stepDelaySec = DEFAULT_STROKE_STEP_DELAY_SEC) => {
     if (v === 0) return "";
     const strokes = [
-      <path key="s1" d="M20 20 H80" />,
-      <path key="s2" d="M50 20 V80" />,
-      <path key="s3" d="M54 46 H74" />,
-      <path key="s4" d="M32 48 V80" />,
-      <path key="s5" d="M16 82 H84" />,
+      <path key="s1" pathLength={1} d="M26.75,23.79c3.12,0.63,6.35,0.5,9.5,0.22c11.81-1.03,25.77-2.56,39.75-3.29c2.84-0.15,5.56-0.03,8.38,0.31" />,
+      <path key="s2" pathLength={1} d="M52.96,25.62c1.4,1.4,2.01,2.88,2.01,5.54c0,11.55-0.01,56.3-0.01,57.34" />,
+      <path key="s3" pathLength={1} d="M56.36,53.48c7.14-0.48,15.52-1.36,21.92-1.84c1.59-0.12,2.47-0.02,3.6,0.16" />,
+      <path key="s4" pathLength={1} d="M27.54,56.37c1.17,1.17,2.05,2.62,2.15,5.21c0.43,10.8,0.43,20.3,0.62,27.92" />,
+      <path key="s5" pathLength={1} d="M14.25,90.04C18,91,21.38,91.23,25,91c14-0.88,39.23-2.07,58.63-2.39c3.36-0.06,6.77,0.32,10,1.37" />,
     ];
+    const visible = strokes.slice(0, Math.min(v, 5));
+
     return (
       <svg width="100%" height="100%" viewBox="0 0 100 100" aria-hidden="true">
-        <g stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none">
-          {strokes.slice(0, Math.min(v, 5))}
+        <g
+          stroke="currentColor"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          transform="translate(50 50) scale(0.94) translate(-50 -50) translate(-5 -3)"
+        >
+          {visible.map((stroke, idx) =>
+            React.cloneElement(stroke, {
+              style: animateFrom !== null && idx >= animateFrom
+                ? {
+                    strokeDasharray: 1,
+                    strokeDashoffset: 1,
+                    animation: "hisei-stroke-draw 0.34s ease-in-out forwards",
+                    animationDelay: `${baseDelaySec + (idx - animateFrom) * stepDelaySec}s`,
+                  }
+                : undefined,
+            }),
+          )}
         </g>
       </svg>
     );
@@ -49,6 +80,7 @@ export default function Board({ board, onClickCell, lastChanged, disabled }: Pro
 
   return (
     <div style={{ width: "100%", overflowX: isMobile ? "auto" : "visible" }}>
+      <style>{STROKE_ANIMATION}</style>
       <div style={{ display: "grid", gap: isMobile ? "4px" : "min(6px, 1.6vw)", justifyItems: "center", width: "fit-content", margin: "0 auto" }}>
         <div
           style={{
@@ -93,6 +125,16 @@ export default function Board({ board, onClickCell, lastChanged, disabled }: Pro
             {Array.from({ length: BOARD_LEN }, (_, i) => {
               const v = board[i];
               const highlight = lastChanged?.has(i);
+              const isPlaced = highlight && lastPlaced === i;
+              const hasPlacedInChange = Boolean(lastChanged && lastPlaced !== undefined && lastChanged.has(lastPlaced));
+              const placedValue = hasPlacedInChange && lastPlaced !== undefined ? board[lastPlaced] ?? 0 : 0;
+              const placedStepDelaySec = placedValue === 2 ? STROKE_DURATION_SEC : DEFAULT_STROKE_STEP_DELAY_SEC;
+              const placedAnimationEndSec = placedValue > 0
+                ? (Math.min(placedValue, 5) - 1) * placedStepDelaySec + STROKE_DURATION_SEC
+                : 0;
+              const baseDelaySec = !isPlaced && hasPlacedInChange ? placedAnimationEndSec : 0;
+              const stepDelaySec = isPlaced && v === 2 ? STROKE_DURATION_SEC : DEFAULT_STROKE_STEP_DELAY_SEC;
+              const animateFrom = !highlight || v <= 0 ? null : isPlaced ? 0 : Math.max(0, v - 1);
               return (
                 <button
                   key={i}
@@ -114,7 +156,7 @@ export default function Board({ board, onClickCell, lastChanged, disabled }: Pro
                   aria-label={`cell-${i}`}
                   title={`index=${i}`}
                 >
-                  {renderMark(v)}
+                  {renderMark(v, animateFrom, baseDelaySec, stepDelaySec)}
                 </button>
               );
             })}
