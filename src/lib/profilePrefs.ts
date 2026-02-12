@@ -101,6 +101,19 @@ export async function ensureFriendIdForCurrentUser() {
   return { ok: true as const, friendId: nextId };
 }
 
+async function getCurrentUserWithFriendId() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return { ok: false as const, reason: error?.message ?? "not logged in" };
+
+  let friendId = normalizeFriendId(getFriendIdFromUserMetadata(data.user.user_metadata));
+  if (!friendId) {
+    const ensured = await ensureFriendIdForCurrentUser();
+    if (!ensured.ok) return ensured;
+    friendId = ensured.friendId;
+  }
+  return { ok: true as const, user: data.user, friendId };
+}
+
 export async function syncCurrentUserPublicProfile() {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
@@ -150,17 +163,18 @@ export async function saveClipPrefsToSupabase(args: {
   starredIds: string[];
   featuredIds: string[];
 }) {
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) return { ok: false as const, reason: authError?.message ?? "not logged in" };
+  const currentUser = await getCurrentUserWithFriendId();
+  if (!currentUser.ok) return currentUser;
   const { data: current } = await supabase
     .from("profiles")
     .select("match_names, icon_image_data_url")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", currentUser.user.id)
     .maybeSingle();
   const cur = (current ?? {}) as { match_names?: Record<string, string>; icon_image_data_url?: string };
   const { error } = await supabase.from("profiles").upsert(
     {
-      user_id: auth.user.id,
+      user_id: currentUser.user.id,
+      friend_id: currentUser.friendId,
       starred_match_ids: normalizeIds(args.starredIds),
       featured_match_ids: normalizeIds(args.featuredIds, FEATURED_CLIPS_LIMIT),
       match_names: cur.match_names ?? {},
@@ -183,12 +197,12 @@ export function getMatchNamesFromUserMetadata(metadata: unknown): Record<string,
 }
 
 export async function saveMatchNamesToSupabase(matchNames: Record<string, string>) {
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) return { ok: false as const, reason: authError?.message ?? "not logged in" };
+  const currentUser = await getCurrentUserWithFriendId();
+  if (!currentUser.ok) return currentUser;
   const { data: current } = await supabase
     .from("profiles")
     .select("starred_match_ids, featured_match_ids, icon_image_data_url")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", currentUser.user.id)
     .maybeSingle();
   const cur = (current ?? {}) as {
     starred_match_ids?: string[];
@@ -197,7 +211,8 @@ export async function saveMatchNamesToSupabase(matchNames: Record<string, string
   };
   const { error } = await supabase.from("profiles").upsert(
     {
-      user_id: auth.user.id,
+      user_id: currentUser.user.id,
+      friend_id: currentUser.friendId,
       match_names: normalizeMatchNames(matchNames),
       starred_match_ids: normalizeIds(cur.starred_match_ids),
       featured_match_ids: normalizeIds(cur.featured_match_ids, FEATURED_CLIPS_LIMIT),
@@ -241,12 +256,19 @@ export async function loadIconImageDataUrlFromProfiles() {
 }
 
 export async function saveIconImageDataUrlToProfiles(iconImageDataUrl: string) {
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth.user) return { ok: false as const, reason: authError?.message ?? "not logged in" };
+  const currentUser = await getCurrentUserWithFriendId();
+  if (!currentUser.ok) return currentUser;
   const sanitized = normalizeIconImageDataUrl(iconImageDataUrl);
   const { error } = await supabase
     .from("profiles")
-    .upsert({ user_id: auth.user.id, icon_image_data_url: sanitized }, { onConflict: "user_id" });
+    .upsert(
+      {
+        user_id: currentUser.user.id,
+        friend_id: currentUser.friendId,
+        icon_image_data_url: sanitized,
+      },
+      { onConflict: "user_id" },
+    );
   if (error) return { ok: false as const, reason: error.message };
   return { ok: true as const };
 }
