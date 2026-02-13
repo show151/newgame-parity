@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Board from "@/components/Board";
-import { applyMove, emptyBoard, type Player } from "@/lib/gameLogic";
+import { applyMove, emptyBoard, getAllWinningLines, type Player } from "@/lib/gameLogic";
 import { findCpuMove, type CpuLevel } from "@/lib/cpuPlayer";
 import { calculateAnimationDuration } from "@/lib/animationTiming";
 
@@ -27,6 +27,7 @@ export default function PlayCpuPage() {
   const [lastChanged, setLastChanged] = useState<Set<number>>(new Set());
   const [lastPlaced, setLastPlaced] = useState<number | undefined>(undefined);
   const [winner, setWinner] = useState<Player | null>(null);
+  const [winningLine, setWinningLine] = useState<Set<number>>(new Set());
   const [msg, setMsg] = useState("");
   const [thinking, setThinking] = useState(false);
   const lastMoveRef = useRef<LastMove | null>(null);
@@ -64,6 +65,8 @@ export default function PlayCpuPage() {
             if (res.winner) {
               setWinner(res.winner);
               setMsg(res.winner === playerSide ? "あなたの勝ち！" : "CPUの勝ち！");
+              const lines = getAllWinningLines(res.newBoard);
+              if (lines.length > 0) setWinningLine(new Set(lines));
             }
           }
         }
@@ -92,6 +95,8 @@ export default function PlayCpuPage() {
     if (res.winner) {
       setWinner(res.winner);
       setMsg(res.winner === playerSide ? "あなたの勝ち！" : "CPUの勝ち！");
+      const lines = getAllWinningLines(res.newBoard);
+      if (lines.length > 0) setWinningLine(new Set(lines));
     }
   };
 
@@ -102,6 +107,7 @@ export default function PlayCpuPage() {
     setHistory(prev => prev.slice(0, -stepsBack));
     setLastChanged(new Set());
     setLastPlaced(undefined);
+    setWinningLine(new Set());
     setMsg("");
     setThinking(false);
     lastMoveRef.current = null;
@@ -112,6 +118,7 @@ export default function PlayCpuPage() {
     setHistory([{ board: emptyBoard(), turn: "p1" }]);
     setLastChanged(new Set());
     setLastPlaced(undefined);
+    setWinningLine(new Set());
     setMsg("");
     setThinking(false);
     lastMoveRef.current = null;
@@ -293,7 +300,7 @@ export default function PlayCpuPage() {
         </div>
       )}
 
-      <Board board={current.board} onClickCell={onClickCell} lastChanged={lastChanged} lastPlaced={lastPlaced} disabled={!canPlay} />
+      <Board board={current.board} onClickCell={onClickCell} lastChanged={lastChanged} lastPlaced={lastPlaced} disabled={!canPlay} winningLine={winningLine} />
     </main>
   );
 }
