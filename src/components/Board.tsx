@@ -18,8 +18,8 @@ const STROKE_ANIMATION = `
   }
 }
 `;
-const STROKE_DURATION_SEC = 0.34;
-const DEFAULT_STROKE_STEP_DELAY_SEC = 0.1;
+export const STROKE_DURATION_SEC = 0.34;
+export const DEFAULT_STROKE_STEP_DELAY_SEC = 0.1;
 
 export default function Board({ board, onClickCell, lastChanged, lastPlaced, disabled }: Props) {
   const [isMobile, setIsMobile] = useState(false);
